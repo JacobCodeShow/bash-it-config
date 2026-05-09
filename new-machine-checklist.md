@@ -36,9 +36,10 @@ command -v tput
 如果新机器要用历史搜索和跳转, 再确认:
 
 ```bash
-command -v atuin
 command -v autojump
 ```
+
+atuin 不需要在安装前手工准备, install.sh 会自动安装到 ~/.atuin/bin, 并补齐 ~/.bash-preexec.sh。
 
 ## 1. 确认当前 bash-it 启动链
 
@@ -66,12 +67,25 @@ cd ~/shell-config-src
 ./install.sh
 ```
 
-执行后会完成这些动作:
+执行 install.sh 时, 脚本会先自动跑一次 preflight_check.sh。
+看完输出后, 需要你手工确认是否继续安装。
+
+如果你已经确认风险并且希望跳过确认提示, 可以执行:
+
+```bash
+./install.sh -f
+```
+
+如果确认继续, 会完成这些动作:
 1. 同步配置到 ~/.shell-config
-2. 将 bash-it 需要的 alias/plugin/custom 文件同步到 ~/.bash_it
-3. 将 bobby-jacob 主题同步到 ~/.bash_it/themes
-4. 自动启用 shell-config 相关 alias 和 plugin
-5. 保留当前 ~/.bashrc 不变, 继续使用你现有的 bash-it 启动链
+2. 按文件名字典序执行安装脚本目录下的 install-*.sh, 默认目录名是 sw-installers/, 当前会安装 Atuin 到 ~/.atuin/bin, 并补齐 ~/.bash-preexec.sh
+3. 将 bash-it 需要的 alias/plugin/custom 文件同步到 ~/.bash_it
+4. 将 bobby-jacob 主题同步到 ~/.bash_it/themes
+5. 自动启用 shell-config 相关 alias 和 plugin
+6. 保留当前 ~/.bashrc 不变, 继续使用你现有的 bash-it 启动链
+
+如果不继续, install.sh 会直接退出, 并提示你先修改配置后再重新执行 install.sh。
+如果使用了 -f 或 --force, install.sh 会打印 WARN 级别提示, 然后跳过确认直接继续。
 
 ## 4. 填写机器专属配置
 
@@ -115,7 +129,17 @@ type ci
 ```bash
 type test-obmc-completion
 command -v atuin
+test -f ~/.bash-preexec.sh
+atuin doctor | grep preexec
 ```
+
+如果 atuin 没装上, 可以单独执行:
+
+```bash
+bash ~/.shell-config/sw-installers/install-atuin.sh
+```
+
+如果后续新增其他安装脚本, 推荐也放在 ~/.shell-config/sw-installers/ 下。即使目录名改了, install.sh 也会自动发现仓库根目录下包含 install-*.sh 的目录并执行。
 
 ## 6. 常见问题快速检查
 

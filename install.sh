@@ -14,8 +14,6 @@ echo "
 "
 
 TARGET_CFG_DIR="$HOME/.shell-config"
-mkdir -p "$TARGET_CFG_DIR"
-mkdir -p "$HOME/.local/npm/bin"
 
 CURRENT_FILE="$(readlink -f "$0")"
 CURRENT_FILE_DIR="$(dirname "$CURRENT_FILE")"
@@ -25,6 +23,148 @@ BASH_IT_THEME_NAME="bobby-jacob"
 BASH_IT_BOOTSTRAPPED=false
 BASH_IT_BOOTSTRAP_BEGIN="# shell-config bash-it bootstrap begin"
 BASH_IT_BOOTSTRAP_END="# shell-config bash-it bootstrap end"
+FORCE_INSTALL=false
+INSTALLER_DIR_PATH=""
+INSTALLER_DIR_NAME=""
+
+COLOR_RESET='\033[0m'
+COLOR_INFO='\033[36m'
+COLOR_WARN='\033[33m'
+COLOR_ERROR='\033[31m'
+COLOR_SUCCESS='\033[32m'
+COLOR_CMD='\033[34m'
+
+log_with_level() {
+    local level="$1"
+    local color="$2"
+    shift 2
+
+    printf '[%b%s%b] %b%s%b\n' "$color" "$level" "$COLOR_RESET" "$color" "$*" "$COLOR_RESET"
+}
+
+log_info() {
+    log_with_level INFO "$COLOR_INFO" "$@"
+}
+
+log_warn() {
+    log_with_level WARN "$COLOR_WARN" "$@"
+}
+
+log_error() {
+    log_with_level ERROR "$COLOR_ERROR" "$@"
+}
+
+log_success() {
+    log_with_level OK "$COLOR_SUCCESS" "$@"
+}
+
+log_cmd() {
+    printf '[%bCMD RUN%b] %b%s%b\n' "$COLOR_SUCCESS" "$COLOR_RESET" "$COLOR_CMD" "$*" "$COLOR_RESET"
+}
+
+resolve_installer_dir() {
+    local candidate_dir
+    local install_scripts=()
+
+    if [[ -d "$CURRENT_FILE_DIR/sw-installers" ]]; then
+        INSTALLER_DIR_PATH="$CURRENT_FILE_DIR/sw-installers"
+        INSTALLER_DIR_NAME="sw-installers"
+        return
+    fi
+
+    shopt -s nullglob
+    for candidate_dir in "$CURRENT_FILE_DIR"/*; do
+        [[ -d "$candidate_dir" ]] || continue
+        install_scripts=("$candidate_dir"/install-*.sh)
+        if (( ${#install_scripts[@]} > 0 )); then
+            INSTALLER_DIR_PATH="$candidate_dir"
+            INSTALLER_DIR_NAME="$(basename "$candidate_dir")"
+            shopt -u nullglob
+            return
+        fi
+    done
+    shopt -u nullglob
+}
+
+usage() {
+    cat <<EOF
+Usage: ./install.sh [options]
+
+Options:
+  -f, --force    Skip the confirmation prompt and continue installation after preflight.
+  -h, --help     Show this help message.
+EOF
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -f|--force)
+                FORCE_INSTALL=true
+            ;;
+            -h|--help)
+                usage
+                exit 0
+            ;;
+            *)
+                log_error "Unknown argument: $1"
+                usage
+                exit 1
+            ;;
+        esac
+        shift
+    done
+}
+
+run_preflight_check() {
+    local preflight_script="$CURRENT_FILE_DIR/preflight_check.sh"
+
+    if [[ ! -f "$preflight_script" ]]; then
+        log_error "Missing preflight script: $preflight_script"
+        exit 1
+    fi
+
+    log_cmd "bash $preflight_script"
+    if bash "$preflight_script"; then
+        return
+    fi
+
+    if [[ "$FORCE_INSTALL" == "true" ]]; then
+        log_warn "Preflight check exited with errors, but continuing because --force was specified."
+        return
+    fi
+
+    log_error "Preflight check failed. Please update your configuration and rerun install.sh, or use -f/--force to continue."
+    exit 1
+}
+
+confirm_installation() {
+    local answer=""
+
+    if [[ "$FORCE_INSTALL" == "true" ]]; then
+        log_warn "Force mode enabled. Skipping confirmation and continuing installation."
+        return
+    fi
+
+    echo
+    printf '%b[CONFIRM]%b Preflight completed. Continue installation? [y/N] ' "$COLOR_INFO" "$COLOR_RESET"
+    if ! IFS= read -r answer; then
+        echo
+        log_warn "Installation aborted. Please update your configuration as needed and rerun install.sh."
+        exit 1
+    fi
+
+    case "$answer" in
+        [yY]|[yY][eE][sS])
+            log_info "Continuing installation."
+            return
+        ;;
+        *)
+            log_warn "Installation aborted. Please update your configuration as needed and rerun install.sh."
+            exit 1
+        ;;
+    esac
+}
 
 ensure_bash_it_framework() {
     if [[ -f "$BASH_IT_DIR/bash_it.sh" ]]; then
@@ -33,16 +173,16 @@ ensure_bash_it_framework() {
 
     if [[ -d "$BASH_IT_DIR" ]]; then
         if [[ -n "$(ls -A "$BASH_IT_DIR" 2>/dev/null)" ]]; then
-            echo "Existing $BASH_IT_DIR does not look like bash-it; aborting auto-bootstrap."
+            log_error "Existing $BASH_IT_DIR does not look like bash-it; aborting auto-bootstrap."
             exit 1
         fi
         rmdir "$BASH_IT_DIR"
     elif [[ -e "$BASH_IT_DIR" ]]; then
-        echo "$BASH_IT_DIR exists but is not a directory; aborting auto-bootstrap."
+        log_error "$BASH_IT_DIR exists but is not a directory; aborting auto-bootstrap."
         exit 1
     fi
 
-    echo -e "[\033[32m CMD RUN \033[0m] \033[34m git clone --depth=1 https://github.com/Bash-it/bash-it.git $BASH_IT_DIR \033[0m"
+    log_cmd "git clone --depth=1 https://github.com/Bash-it/bash-it.git $BASH_IT_DIR"
     git clone --depth=1 https://github.com/Bash-it/bash-it.git "$BASH_IT_DIR"
     BASH_IT_BOOTSTRAPPED=true
 }
@@ -85,7 +225,27 @@ EOF
     fi
 }
 
+run_setup_script() {
+    local script_path="$1"
+
+    if [[ ! -f "$script_path" ]]; then
+        return
+    fi
+
+    log_cmd "bash $script_path"
+    bash "$script_path"
+}
+
+parse_args "$@"
+resolve_installer_dir
+
 ensure_bash_it_framework
+
+run_preflight_check
+confirm_installation
+
+mkdir -p "$TARGET_CFG_DIR"
+mkdir -p "$HOME/.local/npm/bin"
 
 item_list=(
     bobby-jacob
@@ -97,13 +257,27 @@ item_list=(
     uninstall.sh
 )
 
+if [[ -n "$INSTALLER_DIR_NAME" ]]; then
+    item_list+=("$INSTALLER_DIR_NAME")
+fi
+
 for item_name in "${item_list[@]}"; do
     item_path="$CURRENT_FILE_DIR/$item_name"
     if [[ -e "$item_path" ]];then
-        echo -e "[\033[32m CMD RUN \033[0m] \033[34m cp $item_path $TARGET_CFG_DIR -a \033[0m"
+        log_cmd "cp $item_path $TARGET_CFG_DIR -a"
         cp -a "$item_path" "$TARGET_CFG_DIR"
     fi
 done
+
+if [[ -n "$INSTALLER_DIR_PATH" ]]; then
+    shopt -s nullglob
+    for setup_script in "$INSTALLER_DIR_PATH"/install-*.sh; do
+        run_setup_script "$setup_script"
+    done
+    shopt -u nullglob
+else
+    log_warn "No software installer directory was found under $CURRENT_FILE_DIR; skipping managed tool installers."
+fi
 
 rm -f "$TARGET_CFG_DIR/start_my_cfg"
 rm -f "$TARGET_CFG_DIR/main_cfg.sh"
@@ -112,6 +286,8 @@ rm -f "$TARGET_CFG_DIR/my_alias"
 rm -f "$TARGET_CFG_DIR/my_export"
 rm -f "$TARGET_CFG_DIR/my_path"
 rm -f "$TARGET_CFG_DIR/.bashrc_full"
+rm -rf "$TARGET_CFG_DIR/installers"
+rm -f "$TARGET_CFG_DIR/modules/tools/install-atuin.sh"
 rm -rf "$TARGET_CFG_DIR/core"
 rm -rf "$TARGET_CFG_DIR/legacy"
 rm -f "$TARGET_CFG_DIR/.bashrc"
@@ -238,13 +414,14 @@ if [[ "$BASH_IT_BOOTSTRAPPED" == "true" ]]; then
     configure_bash_it_theme
 fi
 
-echo "Synchronized config into $TARGET_CFG_DIR"
-echo "Imported shell-config files into ${BASH_IT_DIR}"
-echo "Installed bash-it theme: bobby-jacob"
+log_success "Synchronized config into $TARGET_CFG_DIR"
+log_success "Imported shell-config files into ${BASH_IT_DIR}"
+log_success "Installed bash-it theme: bobby-jacob"
+log_success "Ensured managed tool setup scripts completed"
 if [[ "$BASH_IT_BOOTSTRAPPED" == "true" ]]; then
-    echo "Bootstrapped bash-it into ${BASH_IT_DIR} and configured ~/.bashrc theme: ${BASH_IT_THEME_NAME}"
+    log_success "Bootstrapped bash-it into ${BASH_IT_DIR} and configured ~/.bashrc theme: ${BASH_IT_THEME_NAME}"
 else
-    echo "Current ~/.bashrc and existing bash-it startup chain are unchanged"
+    log_info "Current ~/.bashrc and existing bash-it startup chain are unchanged"
 fi
 
 
