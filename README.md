@@ -48,7 +48,6 @@
     ```bash
     bash ~/.shell-config/sw-installers/install-atuin.sh
     ```
-
 # [日志等级]
     install.sh、preflight_check.sh 和 sw-installers/ 下的安装脚本统一使用彩色日志:
     1. OK: 安装或检查成功
@@ -81,7 +80,7 @@
     install.sh 会直接把包装文件写入 bash-it 框架目录:
     1. aliases: modules/aliases.sh -> ~/.bash_it/aliases/available/shell-config.aliases.bash
     2. plugins: modules/tools/tool-atuin.sh、modules/tools/tool-nvm.sh、modules/completion/completion-local.sh、modules/completion/completion-openbmc.sh、modules/tools/tool-openbmc-ci.sh、modules/terminal/terminal-settings.sh -> ~/.bash_it/plugins/available
-    3. sw-installers: 默认目录是 sw-installers/*.sh, 只由 install.sh 调用, 不会被 bash-it 启动链 source
+    3. sw-installers: sw-installers/install-atuin.sh 等脚本只由 install.sh 调用, 不会被 bash-it 启动链 source
     4. custom: modules/env/env-locale.sh、modules/env/env-vars.sh、modules/env/machine_local.sh、modules/env/env-path.sh -> ~/.bash_it/custom
     5. theme: bobby-jacob/bobby-jacob.theme.bash -> ~/.bash_it/themes/bobby-jacob/
 
@@ -104,7 +103,7 @@
     如果没有特殊理由, 仍建议保留默认目录名 sw-installers, 这样路径更稳定, 文档和单独执行命令也更直观。
 
 # [主题启用]
-    如果本机已经有 bash-it, 安装脚本会把主题文件复制到 ~/.bash_it/themes/bobby-jacob, 但不会改你的 bash-it 配置。
+    如果本机已经有 bash-it, 安装脚本会把主题文件复制到 ~/.bash_it/themes/bobby-jacob, 并把 ~/.bashrc 里的 BASH_IT_THEME 更新成 bobby-jacob。
     如果本机还没有 bash-it, 安装脚本会自动 bootstrap bash-it 并把 ~/.bashrc 里的主题配置成 bobby-jacob。
 
 # [bash-it 卸载]

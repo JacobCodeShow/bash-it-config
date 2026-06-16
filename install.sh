@@ -187,10 +187,57 @@ ensure_bash_it_framework() {
     BASH_IT_BOOTSTRAPPED=true
 }
 
+patch_bash_it_alias_completion() {
+    local completion_file="$BASH_IT_DIR/completion/available/aliases.completion.bash"
+    local tmp_file=""
+
+    if [[ ! -f "$completion_file" ]]; then
+        return
+    fi
+
+    if grep -q "Single quotes inside alias definitions can break generated wrapper quoting" "$completion_file"; then
+        return
+    fi
+
+    tmp_file="$(mktemp)"
+    awk '
+        /# avoid expanding wildcards/ && !inserted {
+            print ""
+            print "\t\t# Single quotes inside alias definitions can break generated wrapper quoting."
+            print "\t\t# Skip auto-completion wrapper generation for those aliases."
+            print "\t\tif [[ \"$alias_defn\" == *\"\x27\"* ]]; then"
+            print "\t\t\tcontinue"
+            print "\t\tfi"
+            inserted=1
+        }
+        { print }
+    ' "$completion_file" > "$tmp_file"
+    mv "$tmp_file" "$completion_file"
+}
+
 configure_bash_it_theme() {
     local bashrc="$HOME/.bashrc"
 
     touch "$bashrc"
+
+    if [[ "$BASH_IT_BOOTSTRAPPED" != "true" ]]; then
+        if grep -q '^export BASH_IT_THEME=' "$bashrc"; then
+            sed -i "s|^export BASH_IT_THEME=.*$|export BASH_IT_THEME='$BASH_IT_THEME_NAME'|" "$bashrc"
+            return 0
+        fi
+
+        if grep -q '^export BASH_IT=' "$bashrc"; then
+            sed -i "/^export BASH_IT=/a export BASH_IT_THEME='$BASH_IT_THEME_NAME'" "$bashrc"
+            return 0
+        fi
+
+        if grep -q 'bash_it\.sh' "$bashrc"; then
+            sed -i "/bash_it\\.sh/i export BASH_IT_THEME='$BASH_IT_THEME_NAME'" "$bashrc"
+            return 0
+        fi
+
+        return 1
+    fi
 
     if grep -qF "$BASH_IT_BOOTSTRAP_BEGIN" "$bashrc"; then
         sed -i "/$(printf '%s' "$BASH_IT_BOOTSTRAP_BEGIN" | sed 's/[.[\*^$()+?{|]/\\&/g')/,/$(printf '%s' "$BASH_IT_BOOTSTRAP_END" | sed 's/[.[\*^$()+?{|]/\\&/g')/d" "$bashrc"
@@ -210,7 +257,10 @@ configure_bash_it_theme() {
 $BASH_IT_BOOTSTRAP_BEGIN
 export BASH_IT="$BASH_IT_DIR"
 export BASH_IT_THEME='$BASH_IT_THEME_NAME'
-source "\${BASH_IT?}/bash_it.sh"
+if [[ "${SHELL_CONFIG_BASH_IT_SESSION_PID:-}" != "$$" || "${SHELL_CONFIG_FORCE_BASH_IT_RELOAD:-0}" == "1" || "$(type -t x 2>/dev/null || true)" != "function" ]]; then
+    SHELL_CONFIG_BASH_IT_SESSION_PID=$$
+    source "\${BASH_IT?}/bash_it.sh"
+fi
 $BASH_IT_BOOTSTRAP_END
 EOF
         return
@@ -240,6 +290,7 @@ parse_args "$@"
 resolve_installer_dir
 
 ensure_bash_it_framework
+patch_bash_it_alias_completion
 
 run_preflight_check
 confirm_installation
@@ -299,8 +350,8 @@ mkdir -p "$BASH_IT_DIR/themes"
 cat <<'EOF' > "$BASH_IT_DIR/aliases/available/shell-config.aliases.bash"
 #!/bin/bash
 
-SHELL_CONFIG_DIR="${SHELL_CONFIG_DIR:-$HOME/.shell-config}"
-MAIN_FILE="$SHELL_CONFIG_DIR/modules/aliases.sh"
+SHELL_CONFIG_RUNTIME_DIR="${SHELL_CONFIG_RUNTIME_DIR:-$HOME/.shell-config}"
+MAIN_FILE="$SHELL_CONFIG_RUNTIME_DIR/modules/aliases.sh"
 
 if [[ -f "$MAIN_FILE" ]]; then
     # shellcheck source=/dev/null
@@ -311,8 +362,8 @@ EOF
 cat <<'EOF' > "$BASH_IT_DIR/plugins/available/shell-config.atuin.plugin.bash"
 #!/bin/bash
 
-SHELL_CONFIG_DIR="${SHELL_CONFIG_DIR:-$HOME/.shell-config}"
-MAIN_FILE="$SHELL_CONFIG_DIR/modules/tools/tool-atuin.sh"
+SHELL_CONFIG_RUNTIME_DIR="${SHELL_CONFIG_RUNTIME_DIR:-$HOME/.shell-config}"
+MAIN_FILE="$SHELL_CONFIG_RUNTIME_DIR/modules/tools/tool-atuin.sh"
 
 if [[ -f "$MAIN_FILE" ]]; then
     # shellcheck source=/dev/null
@@ -323,11 +374,11 @@ EOF
 cat <<'EOF' > "$BASH_IT_DIR/plugins/available/shell-config.completion.plugin.bash"
 #!/bin/bash
 
-SHELL_CONFIG_DIR="${SHELL_CONFIG_DIR:-$HOME/.shell-config}"
+SHELL_CONFIG_RUNTIME_DIR="${SHELL_CONFIG_RUNTIME_DIR:-$HOME/.shell-config}"
 
 for file in \
-    "$SHELL_CONFIG_DIR/modules/completion/completion-local.sh" \
-    "$SHELL_CONFIG_DIR/modules/completion/completion-openbmc.sh"; do
+    "$SHELL_CONFIG_RUNTIME_DIR/modules/completion/completion-local.sh" \
+    "$SHELL_CONFIG_RUNTIME_DIR/modules/completion/completion-openbmc.sh"; do
     if [[ -f "$file" ]]; then
         # shellcheck source=/dev/null
         source "$file"
@@ -338,8 +389,8 @@ EOF
 cat <<'EOF' > "$BASH_IT_DIR/plugins/available/shell-config.ci.plugin.bash"
 #!/bin/bash
 
-SHELL_CONFIG_DIR="${SHELL_CONFIG_DIR:-$HOME/.shell-config}"
-MAIN_FILE="$SHELL_CONFIG_DIR/modules/tools/tool-openbmc-ci.sh"
+SHELL_CONFIG_RUNTIME_DIR="${SHELL_CONFIG_RUNTIME_DIR:-$HOME/.shell-config}"
+MAIN_FILE="$SHELL_CONFIG_RUNTIME_DIR/modules/tools/tool-openbmc-ci.sh"
 
 if [[ -f "$MAIN_FILE" ]]; then
     # shellcheck source=/dev/null
@@ -350,8 +401,8 @@ EOF
 cat <<'EOF' > "$BASH_IT_DIR/plugins/available/shell-config.nvm.plugin.bash"
 #!/bin/bash
 
-SHELL_CONFIG_DIR="${SHELL_CONFIG_DIR:-$HOME/.shell-config}"
-MAIN_FILE="$SHELL_CONFIG_DIR/modules/tools/tool-nvm.sh"
+SHELL_CONFIG_RUNTIME_DIR="${SHELL_CONFIG_RUNTIME_DIR:-$HOME/.shell-config}"
+MAIN_FILE="$SHELL_CONFIG_RUNTIME_DIR/modules/tools/tool-nvm.sh"
 
 if [[ -f "$MAIN_FILE" ]]; then
     # shellcheck source=/dev/null
@@ -362,8 +413,8 @@ EOF
 cat <<'EOF' > "$BASH_IT_DIR/plugins/available/shell-config.terminal.plugin.bash"
 #!/bin/bash
 
-SHELL_CONFIG_DIR="${SHELL_CONFIG_DIR:-$HOME/.shell-config}"
-MAIN_FILE="$SHELL_CONFIG_DIR/modules/terminal/terminal-settings.sh"
+SHELL_CONFIG_RUNTIME_DIR="${SHELL_CONFIG_RUNTIME_DIR:-$HOME/.shell-config}"
+MAIN_FILE="$SHELL_CONFIG_RUNTIME_DIR/modules/terminal/terminal-settings.sh"
 
 if [[ -f "$MAIN_FILE" ]]; then
     # shellcheck source=/dev/null
@@ -374,12 +425,12 @@ EOF
 cat <<'EOF' > "$BASH_IT_DIR/custom/shell-config.env.bash"
 #!/bin/bash
 
-SHELL_CONFIG_DIR="${SHELL_CONFIG_DIR:-$HOME/.shell-config}"
+SHELL_CONFIG_RUNTIME_DIR="${SHELL_CONFIG_RUNTIME_DIR:-$HOME/.shell-config}"
 
 for file in \
-    "$SHELL_CONFIG_DIR/modules/env/env-locale.sh" \
-    "$SHELL_CONFIG_DIR/modules/env/env-vars.sh" \
-    "$SHELL_CONFIG_DIR/modules/env/machine_local.sh"; do
+    "$SHELL_CONFIG_RUNTIME_DIR/modules/env/env-locale.sh" \
+    "$SHELL_CONFIG_RUNTIME_DIR/modules/env/env-vars.sh" \
+    "$SHELL_CONFIG_RUNTIME_DIR/modules/env/machine_local.sh"; do
     if [[ -f "$file" ]]; then
         # shellcheck source=/dev/null
         source "$file"
@@ -390,8 +441,8 @@ EOF
 cat <<'EOF' > "$BASH_IT_DIR/custom/shell-config.path.bash"
 #!/bin/bash
 
-SHELL_CONFIG_DIR="${SHELL_CONFIG_DIR:-$HOME/.shell-config}"
-MAIN_FILE="$SHELL_CONFIG_DIR/modules/env/env-path.sh"
+SHELL_CONFIG_RUNTIME_DIR="${SHELL_CONFIG_RUNTIME_DIR:-$HOME/.shell-config}"
+MAIN_FILE="$SHELL_CONFIG_RUNTIME_DIR/modules/env/env-path.sh"
 
 if [[ -f "$MAIN_FILE" ]]; then
     # shellcheck source=/dev/null
@@ -410,8 +461,10 @@ ln -sfn "$BASH_IT_DIR/plugins/available/shell-config.ci.plugin.bash" "$BASH_IT_D
 ln -sfn "$BASH_IT_DIR/plugins/available/shell-config.nvm.plugin.bash" "$BASH_IT_DIR/plugins/enabled/shell-config.nvm.plugin.bash"
 ln -sfn "$BASH_IT_DIR/plugins/available/shell-config.terminal.plugin.bash" "$BASH_IT_DIR/plugins/enabled/shell-config.terminal.plugin.bash"
 
-if [[ "$BASH_IT_BOOTSTRAPPED" == "true" ]]; then
-    configure_bash_it_theme
+if configure_bash_it_theme; then
+    log_success "Configured ~/.bashrc theme: ${BASH_IT_THEME_NAME}"
+else
+    log_warn "Installed theme files, but could not locate bash-it startup config in ~/.bashrc to update BASH_IT_THEME automatically"
 fi
 
 log_success "Synchronized config into $TARGET_CFG_DIR"
@@ -419,9 +472,9 @@ log_success "Imported shell-config files into ${BASH_IT_DIR}"
 log_success "Installed bash-it theme: bobby-jacob"
 log_success "Ensured managed tool setup scripts completed"
 if [[ "$BASH_IT_BOOTSTRAPPED" == "true" ]]; then
-    log_success "Bootstrapped bash-it into ${BASH_IT_DIR} and configured ~/.bashrc theme: ${BASH_IT_THEME_NAME}"
+    log_success "Bootstrapped bash-it into ${BASH_IT_DIR} and refreshed ~/.bashrc"
 else
-    log_info "Current ~/.bashrc and existing bash-it startup chain are unchanged"
+    log_info "Preserved the current bash-it startup chain and only updated the theme setting"
 fi
 
 

@@ -53,11 +53,11 @@ alias rm='rm -i'
 alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
 
 #My aliases
-alias_if_command ipmi ipmitool -U ADMIN -P ADMIN -I lanplus -H '$BMC_IP'
-alias_if_command pddipmi ipmitool -U admin -P Pdd@2015 -I lanplus -H '$PDD_IP'
-alias_if_command sksipmi ipmitool -U admin -P kuaishou -I lanplus -H '$SEADRA_KS_IP'
-alias_if_command btipmi ipmitool -U '$BT_USER_NAME' -P '$BT_PWD' -I lanplus -H
-alias_if_command lcipmi ipmitool -U '$BT_USER_NAME' -P '$BT_PWD' -I lanplus -H 172.17.8.39
+alias_if_command ipmi ipmitool -U ADMIN -P ADMIN -I lanplus -H \$BMC_IP
+alias_if_command pddipmi ipmitool -U admin -P Pdd@2015 -I lanplus -H \$PDD_IP
+alias_if_command sksipmi ipmitool -U admin -P kuaishou -I lanplus -H \$SEADRA_KS_IP
+alias_if_command btipmi ipmitool -U \$BT_USER_NAME -P \$BT_PWD -I lanplus -H
+alias_if_command lcipmi ipmitool -U \$BT_USER_NAME -P \$BT_PWD -I lanplus -H 172.17.8.39
 alias_if_file sublime "$HOME/softwares/sublime_text_3/sublime_text"
 alias_if_file myHexToStr "$HOME/my_documents/documents/ownCode/c/HexToStr"
 alias_if_file myBaseConv "$HOME/documents/ownCode/c/myconv"
